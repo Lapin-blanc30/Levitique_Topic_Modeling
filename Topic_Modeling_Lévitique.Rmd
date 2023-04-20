@@ -1,0 +1,753 @@
+---
+title: "Topic_Modeling_Lévitique"
+author: "Alice Leflaëc"
+date: "Février 2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# I. Préparation des données
+
+ 1.1 Définition de la session de travail
+# Indication du chemin vers le notebook
+```{r}
+setwd("~/Documents/Alice (ordinateur Maman)/Humanités Numériques/Topic Modeling")
+monDossier="~/Documents/Alice (ordinateur Maman)/Humanités Numériques/Topic Modeling"
+```
+
+# Récupération des textes
+Les textes latins bruts ont préalablement été téléchargés en format .txt dans le dossier de travail.
+    Le texte de la *Vulgate* a été récupéré sur le site BibleGateway (https://www.biblegateway.com/passage/?search=Leviticus%201&version=VULGATE) puis copié dans un éditeur de texte (Sublime Text) et enregistré en format .txt.
+    Le texte de l'*Heptateuque* a directement été récupéré en format .txt à l'adresse suivante : https://scaife.perseus.org/reader/urn:cts:latinLit:stoa0104c.stoa001.opp-lat1:leviticus?q=leviticus&qk=form
+
+```{r}
+Leu_Vulgate <-readLines("Textes/Vulgate_Leu_all.txt")
+# Fonction readLines indique le contenu de la variable sous forme de chaîne de caractères.
+Leu_Hept <-readLines("Textes/Hept_Leu.txt")
+```
+
+ 1.2 Premier nettoyage du texte : suppression de la ponctuation
+On procède à un premier nettoyage du texte avant la lemmatisation.
+# Suppression de la ponctuation
+
+Création d'un dossier Clearer pour ranger les textes plus propres.
+#dir.create dans une cellule R ou création d'un dossier dans les Documents de l'ordinateur.
+
+Utilisation d'une fonction pour éliminer la ponctuation encombrante avant la lemmatisation (la fonction removePunctation est difficilement exploitable dans le dataframe, il est plus simple de l'utiliser avant). Il faut installer la library tm.
+```{r}
+if(!require("tm")){
+  install.packages("tm")
+  library("tm")
+}
+#On élimine la ponctuation du texte.
+Leu_Vulgate_clearer <- removePunctuation(Leu_Vulgate)
+Leu_Hept_clearer <- removePunctuation(Leu_Hept)
+#Comme la ponctuation sera enlevée sans sauvegarder le résultat, il faut créer un nouveau fichier qui ira dans Clearer.
+write(Leu_Vulgate_clearer, file = "Clearer/Leu_Vulgate_clearer.txt")
+# On indique le nom du fichier et le chemin pour la nouvelle variable.
+write(Leu_Hept_clearer, file = "Clearer/Leu_Hept_clearer.txt")
+```
+
+Les documents peuvent maintenant être lemmatisés sur Pyrrha et exportés en format .tsv. Un convertisseur de .tsv en .csv en ligne est ensuite utilisé.
+
+ 1.3 Second nettoyage du texte : retrait des _stopwords_
+
+ 1.3.1 Importation de la liste de _stopwords_
+ 
+```{r}
+StopWords <- "StopwordsLatin(actualisé).txt"
+Stops = read.csv(StopWords, header=FALSE, stringsAsFactors=FALSE)[,]
+head(Stops,10)
+```
+
+ 1.3.2 Nettoyage du texte
+ 
+Il est nécessaire de créer une chaîne de caractères.
+#Pour la Vulgate
+```{r}
+df_Vulgate <- read.csv("Leu_Vulgate_clear.csv", sep=",")
+#Création d'une chaîne de caractère vide qui contiendra à l'avenir tous les textes contenus dans df. 
+#[Dans le cours de Simon, la colomme Lemma est déjà une chaîne de caractères. On ruse donc pour obtenir cette chaîne (elle est vide pour l'instant mais on dira à R : si le mot n'apparaît pas dans les stopwords ou dans la ponctuation, tu le mets dans cette chaîne de caractères).]
+chaîne_de_caractères_Vulgate <- ""
+#Laisser le contenu vide : il n'y a rien pour l'instant.
+```
+
+#Pour l'Heptateuque
+```{r}
+df_Heptateuque <- read.csv("Leu_Hept_clear.csv", sep=",")
+chaîne_de_caractères_Heptateuque <- ""
+#Laisser le contenu vide : il n'y a rien pour l'instant.
+chaîne_de_caractères_Vulgate
+#Taper le nom de la variable me permet de l'afficher.
+```
+
+Puis on indique le contenu de la chaîne de caractères
+
+# Réduction à la minuscule et retrait des stopwords 
+On indique qu'on réduit à la minuscule pour chaque mot à l'aide d'une boucle, qu'on ne prend pas en compte les stopwords puis qu'on ôte la ponctuation (en réalité la ponctuation avait été enlevée précédemment, mais je laisse le code ici pour le garder en mémoire).
+
+#Pour la Vulgate
+```{r}
+for (word in tolower(df_Vulgate$lemma)) {
+  if (!word %in% Stops) {
+    chaîne_de_caractères_Vulgate <- paste(chaîne_de_caractères_Vulgate, word, sep=" ")
+  }
+  #J'enlève la ponctuation.
+  chaîne_de_caractères_Vulgate <- gsub("[[:punct:]]", "", chaîne_de_caractères_Vulgate)
+}
+chaîne_de_caractères_Vulgate
+```
+
+#Pour l'Heptateuque
+```{r}
+for (word in tolower(df_Heptateuque$lemma)) {
+  if (!word %in% Stops) {
+    chaîne_de_caractères_Heptateuque <- paste(chaîne_de_caractères_Heptateuque, word, sep=" ")
+  }
+  #J'enlève la ponctuation.
+  chaîne_de_caractères_Heptateuque <- gsub("[[:punct:]]", "", chaîne_de_caractères_Heptateuque)
+}
+chaîne_de_caractères_Heptateuque
+```
+
+  1.4. Création d'une liste pour une approche _bag_of_words_
+
+On divise le texte en une dizaine de morceaux (10 est un chiffre arbitraire, on peut en mettre plus ou moins) et on met ces dix morceaux dans une liste qu'on peut par exemple baptiser Extraits. C'est ce qui permet l'approche _bag_of_words_.
+
+Approche _bag_of_words_ : idée que le monde peut être décrit au moyen d'un dictionnaire. Dans sa version la plus simple, un document particulier est représenté par l'histogramme des occurrences des mots le composant : pour un document donné, chaque mot se voit affecté le nombre de fois qu'il apparaît dans le document (source : Wikipédia).
+
+#Pour la Vulgate
+```{r}
+Nb_sequences <- 10
+Extraits_Vulgate <- strwrap(chaîne_de_caractères_Vulgate, nchar(chaîne_de_caractères_Vulgate) / Nb_sequences)
+#On peut afficher le contenu de chaque séquence :
+Extraits_Vulgate[1]
+```
+
+#Pour l'Heptateuque
+```{r}
+Nb_sequences <- 10
+Extraits_Heptateuque <- strwrap(chaîne_de_caractères_Heptateuque, nchar(chaîne_de_caractères_Heptateuque) / Nb_sequences)
+Extraits_Heptateuque[3]
+```
+
+ 1.5.Transformation en matrice vectorielle
+
+Il faut installer les packages tm et tidytext.
+#Pour la Vulgate
+```{r}
+if(!require("tm")){
+  install.packages("tm")
+  library("tm")
+}
+if(!require("tidytext")){
+  install.packages("tidytext")
+  library("tidytext")
+}
+
+#Je transforme mes textes en corpus avec la fonction `corpus()`, un objet de classe `corpus` manipulable dans `R` contenant des données et des métadonnées.
+#La fonction `VectorSource` transforme chaque document en vecteur.
+corpus_Vulgate <- Corpus(VectorSource(Extraits_Vulgate), readerControl = list(language = "lat"))
+# J'affiche les informations à propos de ce corpus
+corpus_Vulgate
+```
+
+#Pour l'Heptateuque
+```{r}
+if(!require("tm")){
+  install.packages("tm")
+  library("tm")
+}
+if(!require("tidytext")){
+  install.packages("tidytext")
+  library("tidytext")
+}
+
+corpus_Heptateuque <- Corpus(VectorSource(Extraits_Heptateuque), readerControl = list(language = "lat"))
+
+corpus_Heptateuque
+```
+
+ 1.6 Création d'un _document_term_matrix_
+
+Un _document_term_matrix_ est une matrice mathématique qui décrit la fréquence des termes qui apparaissent dans une collection de documents.
+
+#Pour la Vulgate
+```{r}
+dtm_Vulgate <- DocumentTermMatrix(corpus_Vulgate)
+dtm_Vulgate
+```
+
+#Pour l'Heptateuque
+```{r}
+dtm_Heptateuque <- DocumentTermMatrix(corpus_Heptateuque)
+dtm_Heptateuque
+```
+
+#II. Analyse des données : fréquence des termes
+
+ 2.1.Graphe représentant la fréquence des termes
+ Installation de la library pour le graphe et dessin du graphe
+
+#Pour la Vulgate¨
+```{r}
+freq_Vulgate <- as.data.frame(colSums(as.matrix(dtm_Vulgate)))
+colnames(freq_Vulgate) <- c("frequence")
+#as.data.frame est une fonction vérifiant qu'un objet est un dataframe ou le forçant à le devenir si c'est possible.
+#colSums est une fonction permettant de former des sommes et des moyennes de lignes et de colonnes pour des tableaux et des dataframes.
+#as.matrix est une fonction générique convertissant en matrice.
+#colnames récupère ou définit le nom des lignes et des colonnes dans un objet de type matrice.
+#c est une fonction générique qui combine ses arguments. La méthode par défaut combine les arguments pour former un vecteur.
+
+#Pour dessiner un graphe, nécessité d'installer une nouvelle library: `ggplot2`
+#gg = Grammar of Graphics
+#Avec ggplot 2, les données représentées graphiquement proviennent toujours d'un dataframe.
+if (!require("ggplot2")){
+  install.packages("ggplot2")
+  library("ggplot2")
+}
+#Dessin du graphe
+#La fonction ggplot initialise le graphique. On commence par définir la source des données (ici freq_Vulgate), puis on indique quelle donnée on veut représenter (les attributs esthétiques) en passant des arguments dans la fonction aes(). Cette fonction spécifie les variables à visualiser et associe à chaque variable un emplacement ou un rôle: on renseigne le paramètre x qui est la variable à représenter sur l'axe horizontal (ici la fréquence).
+#On ajoute, enfin, les éléments de représentation graphique (= geom). On les ajoute à l'objet graphique de base avec l'opérateur +. geom_density permet d'afficher l'estimation de densité d'une variable numérique. On crée une courbe de distribution.
+#Source de la plupart des explications : https://juba.github.io/tidyverse/08-ggplot2.html
+ggplot(freq_Vulgate, aes(x=frequence)) + geom_density()
+```
+
+#Pour l'Heptateuque
+```{r}
+freq_Heptateuque <- as.data.frame(colSums(as.matrix(dtm_Heptateuque)))
+colnames(freq_Heptateuque) <- c("frequence")
+
+#Dessin du graphe
+ggplot(freq_Heptateuque, aes(x=frequence)) + geom_density()
+```
+
+ 2.2 Analyse des données
+ 
+ On retrouve la loi de Zipf dans la distribution des données.
+ 
+ 2.2.1 Mots avec de faibles fréquences
+On peut compter les mots avec les fréquences faibles, par exemple avec moins de 10 occurrences (n+1).
+
+#Pour la Vulgate
+```{r}
+motsPeuFrequents_Vulgate <- findFreqTerms(dtm_Vulgate, 0, 9)
+#Si vous êts sur windows, décommentez la ligne suivante
+#Encoding(motsPeuFrequents)<-"latin-1"
+length(motsPeuFrequents_Vulgate)
+head(motsPeuFrequents_Vulgate,50)
+```
+
+#Pour l'Heptateuque
+```{r}
+#Je retire tous les mots qui apparaissent très peu.
+motsPeuFrequents_Heptateuque<- findFreqTerms(dtm_Heptateuque, 0, 9)
+#Si vous êts sur windows, décommentez la ligne suivante
+#Encoding(motsPeuFrequents)<-"latin-1"
+length(motsPeuFrequents_Heptateuque)
+head(motsPeuFrequents_Heptateuque,50)
+```
+
+ 2.2.2 Mots avec de fortes fréquences
+ On peut aussi compter et afficher les mots les plus fréquents, par exemple avec plus de 50 occurrences.
+
+#Pour la Vulgate
+```{r}
+motsTresFrequents_Vulgate <- findFreqTerms(dtm_Vulgate, 49, Inf)
+#Si vous êts sur windows, décommentez la ligne suivante
+#Encoding(motsTresFrequents)<-"latin-1"
+length(motsTresFrequents_Vulgate)
+head(motsTresFrequents_Vulgate,50)
+```
+
+```{r}
+motsTresFrequents_Vulgate <- findFreqTerms(dtm_Vulgate, 99, Inf)
+#Si vous êts sur windows, décommentez la ligne suivante
+#Encoding(motsTresFrequents)<-"latin-1"
+length(motsTresFrequents_Vulgate)
+head(motsTresFrequents_Vulgate,50)
+```
+
+#Pour l'Heptateuque
+```{r}
+motsTresFrequents_Heptateuque <- findFreqTerms(dtm_Heptateuque, 9, Inf)
+#Si vous êts sur windows, décommentez la ligne suivante
+#Encoding(motsTresFrequents)<-"latin-1"
+length(motsTresFrequents_Heptateuque)
+head(motsTresFrequents_Heptateuque,50)
+```
+
+```{r}
+motsTresFrequents_Heptateuque <- findFreqTerms(dtm_Heptateuque, 11, Inf)
+#Si vous êts sur windows, décommentez la ligne suivante
+#Encoding(motsTresFrequents)<-"latin-1"
+length(motsTresFrequents_Heptateuque)
+head(motsTresFrequents_Heptateuque,50)
+```
+
+ 2.2.3.Association entre les mots
+#Pour l'Heptateuque
+```{r}
+findAssocs(dtm_Heptateuque, terms = "dominus", corlimit = 0.5)
+```
+```{r}
+findAssocs(dtm_Heptateuque, terms = "uir", corlimit = 0.5)
+```
+```{r}
+findAssocs(dtm_Heptateuque, terms = "ius1", corlimit = 0.5)
+```
+
+ 2.3 Nettoyage de la DTM pour éliminer les rangs vides.
+
+#Pour la Vulgate
+```{r}
+rowTotals <- apply(dtm_Vulgate, 1, sum)      #On trouve la somme des mots dans chaque document.
+dtm_Vulgate_clean   <- dtm_Vulgate[rowTotals> 0, ]    #On retire tous les documents sans mot.
+```
+
+#Pour l'Heptateuque
+```{r}
+rowTotals <- apply(dtm_Heptateuque, 1, sum)
+dtm_Heptateuque_clean   <- dtm_Heptateuque[rowTotals> 0, ]
+```
+
+#III. Topic Modeling
+
+Un thème ( _topic_ ) est un _cluster_ de mots i.e. une récurrence de co-occurrences.
+
+3.1 Installation de la library pour le _topic_modeling_
+
+Comme le package "topicmodels" ne parvenait pas à s'installer, il a fallu télécharger la bibliothèque GSL (bibliothèque pour le calcul numérique en C et C++) via le terminal de l'ordinateur.
+
+```{r}
+if(!require("topicmodels")){
+  install.packages("topicmodels")
+  library("topicmodels")
+}
+```
+ 
+ 3.2 LDA ( _Latent Dirichlet allocation_ )
+ 
+ La _LDA_  est un modèle génératif probabiliste permettant d’expliquer des ensembles d’observations au moyen de groupes non observés, eux-mêmes définis par des similarités de données. Le modèle va classer aléatoirement tous les mots en _n_ sujets, et tenter d'affiner cette répartition de manière itérative en observant les contextes.
+Il faut définir à l'avance un nombre de sujets/thèmes ( cf. infra la variable `k`).
+ 
+#Pour la Vulgate
+```{r}
+#On peut partir sur une classification en deux _topics_.
+k = 2
+lda_2_Vulgate <- LDA(dtm_Vulgate_clean, k= k, control = list(seed = 1234))
+#Seed doit être un nombre aléatoire.
+#Puis on peut tenter une classification en trois topics.
+lda_3_Vulgate <- LDA(dtm_Vulgate_clean, k= k+1, control = list(alpha = 0.1))
+```
+
+Le résultat produit est une matrice avec pour chaque mot la probabilité qu'il appartienne à l'un des différents _topics_. On donne un score _β_, qui est celui présenté infra (il contient les probabilités de chaque mot d’avoir été généré par un topic).
+
+```{r}
+topics_2_Vulgate <- tidy(lda_2_Vulgate, matrix = "beta")
+#Tidy est une fonction rangeant le résultat d'un test dans un dataframe récapitulatif.
+topics_2_Vulgate
+```
+
+```{r}
+topics_3_Vulgate <- tidy(lda_3_Vulgate, matrix = "beta")
+topics_3_Vulgate
+```
+
+#Pour l'Heptateuque
+```{r}
+#On peut partir sur une classification en deux _topics_.
+k = 2
+lda_2_Heptateuque <- LDA(dtm_Heptateuque_clean, k= k, control = list(seed = 1234))
+#Seed doit être un nombre aléatoire.
+#Puis on peut tenter une classification en trois topics.
+lda_3_Heptateuque <- LDA(dtm_Heptateuque_clean, k= k+1, control = list(alpha = 0.1))
+```
+
+Le résultat produit est une matrice avec pour chaque mot la probabilité qu'il appartienne à un des différents _topics_. On donne un score _β_, qui est celui présenté infra.
+
+```{r}
+topics_2_Heptateuque <- tidy(lda_2_Heptateuque, matrix = "beta")
+topics_2_Heptateuque
+```
+
+```{r}
+topics_3_Heptateuque <- tidy(lda_3_Heptateuque, matrix = "beta")
+topics_3_Heptateuque
+```
+
+ 3.3 Les paramètres de Gibbs
+ 
+Les paramètres de Gibbs permettent une sophistication du système précédent. C'est une probabilité conditionnelle qui s'appuie, pour calculer le _β_ d'un mot, sur le _β_ des mots voisins. Pour ce faire, il faut déterminer:
+1. À quel point un document aime un _topic_.
+2. À quel point un _topic_ aime un mot.
+
+ 3.3.1 Installation de la library "ldatuning" pour déterminer le nombre optimal de topics
+ 
+Pour installer cette library, il a été nécessaire de taper la commande suivante dans le terminal de l'ordinateur : sudo apt-get install libmpfr-dev (travail sous Linux).
+
+```{r}
+if(!require("ldatuning")){
+  install.packages("ldatuning")
+  library("ldatuning")
+}
+```
+
+3.3.2 Détermination du nombre optimal de topics.
+#Pour la Vulgate
+```{r}
+#Exécution du calcul avec la fonction FindTopicsNumber
+topicsNumber_Vulgate <- FindTopicsNumber(
+  #La DTM utilisée est la suivante :
+  dtm_Vulgate_clean,
+  #Le nombre de possibilités testées :
+  topics = seq(from = 2, to = 20, by = 1),
+  #Les métriques utilisées
+  metrics = c("Griffiths2004", "CaoJuan2009", "Arun2010", "Deveaud2014"),
+  method = "Gibbs",
+  control = list(seed = 77),
+  verbose = TRUE #Si c'est FALSE, cela supprime tous les avertissments et les informations additionnelles.
+)
+
+#Utilisation de la fonction seq()qui permet de créer une séquence d'éléments dans un vecteur. La syntaxe est la suivante : seq (from, to, by, length.out) from = élément de début de la séquence ; to = élément de fin de la séquence ; by = différence entre les éléments ; length.out = longueur maximale du vecteur.
+
+#Affichage du résultat
+FindTopicsNumber_plot(topicsNumber_Vulgate)
+#Lecture du graph : "“Griffiths” et “Deveaud” suivent un principe de maximisation alors que “CaoJuan” et “Arun” obéissent à un principe de minimisation. Je vous épargne les détails techniques, mais l’idée ici est d’identifier l’endroit où simultanément “Griffiths” et “Deveaud” se rejoignent le plus et où c’est également le cas pour “CaoJuan” et “Arun”. Tout est histoire de compromis, trouver l’endroit ou l’écart entre les courbes est minimal en haut et en bas !" (source : https://ouvrir.passages.cnrs.fr/wp-content/uploads/2019/07/rapp_topicmodel.html)
+```
+ Le nombre optimal de topics semble ici être 7.
+ 
+#Pour l'Heptateuque
+```{r}
+#Exécution du calcul
+topicsNumber_Heptateuque <- FindTopicsNumber(
+  #La DTM utilisée
+  dtm_Heptateuque_clean,
+  #Le nombre de possibilités testées
+  topics = seq(from = 2, to = 20, by = 1),
+  #Les métriques utilisées
+  metrics = c("Griffiths2004", "CaoJuan2009", "Arun2010", "Deveaud2014"),
+  method = "Gibbs",
+  control = list(seed = 77),
+  verbose = TRUE
+)
+#Affichage du résultat
+FindTopicsNumber_plot(topicsNumber_Heptateuque)
+```
+ Le nombre optimal de topics semble être 6.
+ 
+ 3.3.3 Exécution du calcul pour le topic modeling
+#Pour la Vulgate
+```{r}
+## Set parameters for Gibbs sampling
+#Le modèle va tourner 2000 fois avant de commencer à enregistrer les résultats
+burnin <- 2000
+#Après cela il va encore tourner 2000 fois
+iter <- 2000
+# Il ne va enregistrer le résultat que toutes les 500 itérations
+thin <- 500
+#seed et nstart pour la reproductibilité
+SEED=c(1, 2, 3, 4, 5)
+seed <-SEED
+nstart <- 5
+#Seul le meilleur modèle est utilisé.
+best <- TRUE
+#7 topics
+lda_gibbs_7_Vulgate <- LDA(dtm_Vulgate_clean, 7, method="Gibbs", control=list(nstart=nstart, seed=seed, best=best, burnin=burnin, iter=iter, thin=thin))
+#Utilisation de la fonction LDA avec la dtm utilisée, le nombre de topics, la méthode et le contrôle appliqué.
+
+#19 topics
+lda_gibbs_19_Vulgate <- LDA(dtm_Vulgate_clean, 19, method="Gibbs", control=list(nstart=nstart, seed=seed, best=best, burnin=burnin, iter=iter, thin=thin))
+```
+
+On peut désormais voir les premiers résultats pour chacun des modèles. Il s'agit des mots dont la fréquence d'utilisation est corrélée.
+
+```{r}
+"LDA 2"
+termsTopic_lda_2_Vulgate <- as.data.frame(terms(lda_2_Vulgate,10))
+head(termsTopic_lda_2_Vulgate,11)
+"LDA 3"
+termsTopic_lda_3_Vulgate <- as.data.frame(terms(lda_3_Vulgate,10))
+head(termsTopic_lda_3_Vulgate,11)
+"LDA GIBBS 7"
+termsTopic_lda_gibbs_7_Vulgate <- as.data.frame(terms(lda_gibbs_7_Vulgate,10))
+head(termsTopic_lda_gibbs_7_Vulgate,11)
+"LDA GIBBS 19"
+termsTopic_lda_gibbs_19_Vulgate <- as.data.frame(terms(lda_gibbs_19_Vulgate,10))
+head(termsTopic_lda_gibbs_19_Vulgate,11)
+```
+
+Nous allons utiliser `lda_gibbs_7_Vulgate`, comme le nombre optimal de topics était de 7, et construire une matrice avec les _β_ des tokens (pour les ɣ, et donc des probabilités par document, on aurait mis `matrix = "gamma"`). Chaque token est répété deux fois, avec une probabilité pour chaque _topic_:
+
+```{r}
+topics_Vulgate <- tidy(lda_gibbs_7_Vulgate, matrix = "beta")
+topics_Vulgate
+```
+
+#Pour l'Heptateuque
+```{r}
+## Set parameters for Gibbs sampling
+#Le modèle va tourner 2000 fois avant de commencer à enregistrer les résultats
+burnin <- 2000
+#Après cela il va encore tourner 2000 fois
+iter <- 2000
+# Il ne va enregistrer le résultat que toutes les 500 itérations
+thin <- 500
+#seed et nstart pour la reproductibilité
+SEED=c(1, 2, 3, 4, 5)
+seed <-SEED
+nstart <- 5
+#Seul le meilleur modèle est utilisé.
+best <- TRUE
+#5 topics
+lda_gibbs_5_Heptateuque <- LDA(dtm_Heptateuque_clean, 5, method="Gibbs", control=list(nstart=nstart, seed=seed, best=best, burnin=burnin, iter=iter, thin=thin))
+#6 topics
+lda_gibbs_6_Heptateuque <- LDA(dtm_Heptateuque_clean, 6, method="Gibbs", control=list(nstart=nstart, seed=seed, best=best, burnin=burnin, iter=iter, thin=thin))
+```
+
+On peut désormais voir les premiers résultats pour chacun des modèles. Il s'agit des mots dont la fréquence d'utilisation est corrélée.
+
+```{r}
+"LDA 2"
+termsTopic_lda_2_Heptateuque <- as.data.frame(terms(lda_2_Heptateuque,10))
+head(termsTopic_lda_2_Heptateuque,11)
+"LDA 3"
+termsTopic_lda_3_Heptateuque <- as.data.frame(terms(lda_3_Heptateuque,10))
+head(termsTopic_lda_3_Heptateuque,11)
+"LDA GIBBS 5"
+termsTopic_lda_gibbs_5_Heptateuque <- as.data.frame(terms(lda_gibbs_5_Heptateuque,10))
+head(termsTopic_lda_gibbs_5_Heptateuque,11)
+"LDA GIBBS 6"
+termsTopic_lda_gibbs_6_Heptateuque <- as.data.frame(terms(lda_gibbs_6_Heptateuque,10))
+head(termsTopic_lda_gibbs_6_Heptateuque,11)
+```
+
+Nous allons utiliser `lda_gibbs_6_Heptateuque`, comme 6 est apparu comme le nombre optimal possible de topics, et construire une matrice avec les _β_ des tokens (pour les ɣ, et donc des probabilités par document, on aurait mis `matrix = "gamma"`). Chaque token est répété deux fois, avec une probabilité pour chaque _topic_:
+
+```{r}
+topics_Heptateuque <- tidy(lda_gibbs_6_Heptateuque, matrix = "beta")
+topics_Heptateuque
+```
+
+#IV. Visualisation
+
+ 4.1 Récupération des mots
+
+ 4.1.1 Installation de la library "dplyr"
+Cette library facilite le traitement et la manipulation de données contenues dans une ou plusieurs tables en proposant une syntaxe sous forme de verbes.
+```{r}
+if (!require("dplyr")){
+   install.packages("dplyr")
+  library("dplyr")
+}
+```
+
+ 4.1.2 Affichage des mots récupérés dans un graphe
+#Pour la Vulgate
+```{r}
+#Recupération des mots
+top_terms_Vulgate <- topics_Vulgate %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  ungroup()  %>%
+  arrange(topic, -beta)
+#Dessin du graphe
+#On retrouve la fonction ggplot, cette fois-ci avec geom_col qui permet de créer des diagrammes à barres (barplots).
+top_terms_Vulgate %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) + geom_col(show.legend = FALSE) +
+                                                  facet_wrap(~ topic, scales = "free") +
+                                                  coord_flip() +
+                                                  scale_x_reordered()
+```
+
+#Pour l'Heptateuque
+Avec 6 topics
+```{r}
+#Récupération des mots
+top_terms_Heptateuque_6 <- topics_Heptateuque %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  ungroup()  %>%
+  arrange(topic, -beta)
+#Dessin du graphe
+top_terms_Heptateuque_6 %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) + geom_col(show.legend = FALSE) +
+                                                  facet_wrap(~ topic, scales = "free") +
+                                                  coord_flip() +
+                                                  scale_x_reordered()
+```
+
+ 4.2 Association des tokens aux topics
+
+Installation de la library reshape2 pour pouvoir utiliser la fonction melt qui permet de modifier le format des données en fonction d’une ou plusieurs variables de référence (passage d'une table large avec de nombreuses colonnes à une table haute avec de nombreuses lignes et peu de colonnes).
+```{r}
+if (!require("reshape2")){
+  install.packages("reshape2")
+  library("reshape2")
+}
+```
+ 
+#Pour la Vulgate
+```{r}
+df_Vulgate_2 <- melt(as.matrix(dtm_Vulgate_clean))
+df_Vulgate_2 <- df_Vulgate_2[df_Vulgate_2$Terms %in%findFreqTerms(dtm_Vulgate_clean, lowfreq = 50), ]
+ggplot(df_Vulgate_2, aes(as.factor(Docs), Terms, fill=log(value))) +
+                                             geom_tile() +
+                                             xlab("Sujets") +
+                                             scale_fill_continuous(low="#FEE6CE", high="#E6550D") +
+                                             theme(axis.text.x = element_text(angle=90, hjust=1))
+```
+
+```{r, fig.width=12, fig.height=12}
+tt_Vulgate <- posterior(lda_gibbs_7_Vulgate)$terms
+melted_Vulgate = melt(tt_Vulgate[,findFreqTerms(dtm_Vulgate_clean, 50,500)])
+
+colnames(melted_Vulgate) <- c("Topics", "Terms", "value")
+melted_Vulgate$Topics <- as.factor(melted_Vulgate$Topics)
+ggplot(data = melted_Vulgate, aes(x=Topics, y=Terms, fill=value)) +
+                                                                      geom_tile() +
+                                                             theme(text = element_text(size=35))
+```
+
+#Pour l'Heptateuque
+```{r}
+df_Heptateuque <- melt(as.matrix(dtm_Heptateuque_clean))
+df_Heptateuque <- df_Heptateuque[df_Heptateuque$Terms %in%findFreqTerms(dtm_Heptateuque_clean, lowfreq = 7), ]
+ggplot(df_Heptateuque, aes(as.factor(Docs), Terms, fill=log(value))) +
+                                             geom_tile() +
+                                             xlab("Sujets") +
+                                             scale_fill_continuous(low="#FEE6CE", high="#E6550D") +
+                                             theme(axis.text.x = element_text(angle=90, hjust=1))
+```
+
+Avec 6 topics
+```{r, fig.width=12, fig.height=12}
+tt_Heptateuque <- posterior(lda_gibbs_6_Heptateuque)$terms
+melted_Heptateuque = melt(tt_Heptateuque[,findFreqTerms(dtm_Heptateuque_clean, 10,20)])
+
+colnames(melted_Heptateuque) <- c("Topics", "Terms", "value")
+melted_Heptateuque$Topics <- as.factor(melted_Heptateuque$Topics)
+ggplot(data = melted_Heptateuque, aes(x=Topics, y=Terms, fill=value)) + 
+                                              geom_tile() +
+                                              theme(text = element_text(size=35))
+```
+
+ 4.3 Observation du _score gamma_
+ 
+Le score gamma est la probabilité qu'un document contienne un sujet.
+
+#Pour la Vulgate
+```{r}
+DocumentTopicProbabilities_Vulgate <- as.data.frame(lda_gibbs_7_Vulgate@gamma)
+rownames(DocumentTopicProbabilities_Vulgate) <- rownames(corpus_Vulgate)
+head(DocumentTopicProbabilities_Vulgate)
+```
+
+#Pour l'Heptateuque
+```{r}
+DocumentTopicProbabilities_Heptateuque <- as.data.frame(lda_gibbs_6_Heptateuque@gamma)
+rownames(DocumentTopicProbabilities_Heptateuque) <- rownames(corpus_Heptateuque)
+head(DocumentTopicProbabilities_Heptateuque)
+```
+
+ 4.4. Nuages de mots
+ 
+Pour faire des faire des _word clouds_, il faut installer les libraries suivantes :
+```{r}
+if (!require("wordcloud")){
+   install.packages("wordcloud")
+  library("wordcloud")
+}
+if (!require("RColorBrewer")){
+   install.packages("RColorBrewer")
+  library("RColorBrewer")
+}
+if (!require("wordcloud2")){
+   install.packages("wordcloud2")
+  library("wordcloud2")
+}
+```
+
+#Pour la Vulgate
+On récupère les mots et on les associe à leur 𝛃
+
+```{r, fig.width=20, fig.height=20}
+tm_Vulgate <- posterior(lda_gibbs_7_Vulgate)$terms
+data_Vulgate = data.frame(colnames(tm_Vulgate))
+head(data_Vulgate)
+```
+
+
+Puis on produit une visualisation par _topic_
+
+```{r, fig.width=30, fig.height=20}
+for(topic in seq(from = 1, to = 7, by = 1)){
+    data_Vulgate$topic <-tm_Vulgate[topic,]
+    #text(x=0.5, y=1, paste("V",topic, sep=""),cex=0.6)
+    wordcloud(
+      words = data_Vulgate$colnames.tm_Vulgate., #Mots à dessiner
+      freq = data_Vulgate$topic, #Fréquence des mots
+      #Min.freq=sous ce seuil, les mots ne seront pas affichés
+      min.freq=0.0002,
+      #max.words=nombre maximum de mots à afficher
+      max.words=20,
+      #Random.order dessine les mots dans un ordre aléatoire. Si faux, ils sont dessinés par ordre décroissant de la fréquence.
+      random.order=FALSE,
+      #rot.per=% de mots à 90°
+      rot.per=.35,
+      #taille du graphe
+      scale=c(10,10),
+      #couleurs
+      colors = brewer.pal(5, "Dark2")
+      # il est possible de rentrer directement les couleurs qui nous intéressent
+      #c("red", "blue", "yellow", "chartreuse", "cornflowerblue", "darkorange")
+    )
+}
+```
+
+
+#Pour l'Heptateuque
+On récupère les mots et on les associe à leur 𝛃. On s'appuie sur le nombre de 6 topics.
+
+```{r, fig.width=20, fig.height=20}
+tm_Heptateuque <- posterior(lda_gibbs_6_Heptateuque)$terms
+data_Heptateuque = data.frame(colnames(tm_Heptateuque))
+head(data_Heptateuque)
+```
+
+Puis on produit une visualisation par _topic_
+
+```{r, fig.width=30, fig.height=20}
+for(topic in seq(from = 1, to = 6, by = 1)){
+    data_Heptateuque$topic <-tm_Heptateuque[topic,]
+    #text(x=0.5, y=1, paste("V",topic, sep=""),cex=0.6)
+    wordcloud(
+      words = data_Heptateuque$colnames.tm_Heptateuque.,
+      freq = data_Heptateuque$topic,
+      #sous ce seuil, les mots ne seront pas affichés
+      min.freq=0.0002,
+      #nombre maximum de mots à afficher
+      max.words=30,
+      #Si faux, en ordre croissant
+      random.order=FALSE,
+      #% de mots à 90°
+      rot.per=.35,
+      #taille du graph
+      scale=c(10,10),
+      #couleurs
+      colors = brewer.pal(5, "Dark2")
+      # il est possible de rentrer directement les couleurs qui nous intéressent
+      #c("red", "blue", "yellow", "chartreuse", "cornflowerblue", "darkorange")
+    )
+}
+```
+
+# V. Sources
+
+La grande majorité du code provient d'un cours de Simon Gabay (Université de Genève).
+
