@@ -6,8 +6,7 @@ Le projet mené est une  approche comparée par _topic modeling_ de deux version
 
 ## Données
 Les textes comparés sont les suivants
-* Le texte du Lévitique dans la Vulgate, récupéré sur le site [Bible-
-Gateway](https://www.biblegateway.com/passage/?search=Leviticus%201&version=VULGATE).
+* Le texte du Lévitique dans la Vulgate, récupéré sur le site [Bible-Gateway](https://www.biblegateway.com/passage/?search=Leviticus%201&version=VULGATE).
 * Le texte du Lévitique dans l'_Heptateuque_, récupéré sur la bibliothèque numérique [Perseus Scaife Viewer](https://scaife.perseus.org/reader/urn:cts:latinLit:stoa0104c.stoa001.opp-lat1:leviticus/?q=leviticus&qk=form).
 
 ## Licence
