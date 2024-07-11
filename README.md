@@ -2,7 +2,7 @@
 
 
 ## Projet
-Le projet mené est une  approche comparée par _topic modeling_ de deux versions latines du livre du Lévitique : le texte de la Vulgate et celui d'un poème latin du V<sup>e</sup> siècle, l'_Heptateuque_. Nous avons utilisé le logiciel d'analyses statistiques R pour effectuer les calculs et produire les visualisations. Pour plus d'informations, voir le document  intitulé "Descriptif_TopicModeling_Levitique".
+Le projet mené est une  approche comparée par _topic modeling_ de deux versions latines du livre du Lévitique : le texte de la Vulgate et celui d'un poème latin du V<sup>e</sup> siècle, l'_Heptateuque_. Nous avons utilisé le logiciel d'analyses statistiques R pour effectuer les calculs et produire les visualisations. Pour plus d'informations, voir le document  intitulé "Descriptif_TopicModeling_Levitique" (légèrement modifié en juillet 2024).
 
 ## Données
 Les textes comparés sont les suivants
